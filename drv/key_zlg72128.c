@@ -4,6 +4,9 @@
 #include <linux/fs.h>  
 #include <linux/init.h>  
 #include <linux/delay.h>  
+#include <linux/platform_device.h>
+#include <linux/of.h>
+#include <linux/of_address.h>
 #include <asm/uaccess.h>  
 #include <asm/irq.h>  
 #include <asm/io.h>  
@@ -25,45 +28,64 @@
 		const typeof( ((type *)0)->member ) *__mptr = (ptr);    \
 		(type *)( (char *)__mptr - offsetof(type,member) );})
 
-struct platform_driver {
-	int (*probe)(struct platform_device *);
-	int (*remove)(struct platform_device *);
-	void (*shutdown)(struct platform_device *);
-	int (*suspend)(struct platform_device *, pm_message_t state);
-	int (*resume)(struct platform_device *);
-	struct device_driver driver;
-	const struct platform_device_id *id_table;
-	bool prevent_deferred_probe;
+
+
+
+
+
+static int zlg72128_probe(struct i2c_client *i2c_client,const struct i2c_devied_id *id)
+{
+	printk("This is zlg72128 probe function!\n");
+	return 0;
+}
+
+static int zlg72128_remove(struct i2c_client *i2c_client)
+{
+	printk("This is zlg72128 remove function!\n");
+	return 0;
+}
+
+const struct  i2c_device_id zlg72128_id_table = 
+{
+	.name = ZLG72128_DRIVER_NAME
 };
 
-static struct platform_driver zlg72128_platform_driver = {
-    .driver = {
-        .name = ZLG72128_DRIVER_NAME,
-        .owner = THIS_MODULE,
-        .of_match_table = of_match_ptr(zlg72128_dt_ids),
-    },   
-    .probe = zlg72128_probe,
+const struct of_device_id  zlg72128_dt_ids[] = {
+    { .compatible = "zlg72128"},
+    { }  
+};
+
+static struct i2c_driver zlg72128_driver = {
+	.probe = zlg72128_probe,
     .remove = zlg72128_remove,
-};
-
-struct of_device_id {
-	char	name[32];
-	char	type[32];
-	char	compatible[128];
-	const void *data;
+    .driver = {
+        .owner = THIS_MODULE,
+		.name = ZLG72128_DRIVER_NAME,
+        .of_match_table = zlg72128_dt_ids
+    },
+	.id_table = &zlg72128_id_table 
 };
 
 static int __init zlg72128_init(void)
 {
-    return platform_driver_register(&zlg72128_platform_driver);
+	int ret;
+    ret = i2c_add_driver(&zlg72128_driver);
+	if(ret < 0)
+	{
+		printk("zlg72128_driver error!\n");
+		return ret;
+	}
+	printk("zlg72128_driver added!\n");
+	return 0;
 }
 
 static void __exit zlg72128_exit(void)
 {
-    platform_driver_unregister(&zlg72128_platform_driver);
+    i2c_del_driver(&zlg72128_driver);
+	printk("zlg72128 driver deleted!\n");
 }
 
-late_initcall(zlg72128_init);
+module_init(zlg72128_init);
 module_exit(zlg72128_exit);
 
 MODULE_LICENSE("GPL"); 
