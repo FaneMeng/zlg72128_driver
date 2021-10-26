@@ -1,0 +1,34 @@
+{
+    "configurations": [
+    
+    {
+    "name": "Linux",
+    
+    "includePath": [
+    
+    "/home/mfy/Linux-drive/Linux-core-source-code/linux-imx-rel_imx_4.1.15_2.1.0_ga/**",
+    
+    "/home/mfy/Linux-drive/Linux-core-source-code/linux-imx-rel_imx_4.1.15_2.1.0_ga/include",
+    
+    "/home/mfy/Linux-drive/Linux-core-source-code/linux-imx-rel_imx_4.1.15_2.1.0_ga/include/linux",
+    
+    "/home/mfy/Linux-drive/Linux-core-source-code/linux-imx-rel_imx_4.1.15_2.1.0_ga/arch/arm/include"
+    
+    ],
+    
+    "defines": [],
+    
+    
+    "cStandard": "c11",
+    
+    "cppStandard": "c++17",
+    
+    "intelliSenseMode": "clang-x64"
+    
+    }
+    
+    ],
+    
+    "version": 4
+    
+    }

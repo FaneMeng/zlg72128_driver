@@ -1,0 +1,20 @@
+{
+    "files.associations": {
+        "wait.h": "c",
+        "input.h": "c",
+        "interrupt.h": "c",
+        "module.h": "c",
+        "kmod.h": "c",
+        "gfp.h": "c",
+        "mmzone.h": "c",
+        "page-flags-layout.h": "c",
+        "xfs5152reg.h": "c",
+        "uaccess.h": "c",
+        "platform_device.h": "c",
+        "semaphore.h": "c",
+        "timer.h": "c",
+        "device.h": "c",
+        "delay.h": "c",
+        "i2c-dev.h": "c"
+    }
+}

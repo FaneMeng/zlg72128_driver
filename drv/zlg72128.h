@@ -2,6 +2,69 @@
 #define __ZLG72128_LEDKEYS_H
 
 
+#define DEBUG() printk("----------------%d----------------\n",__LINE__)
+
+/*---------------------------------zlg72128寄存器定义------------------------------*/
+#define ZLG72128_REG_SYSTEMREG				0x00
+#define ZLG72128_REG_KEY					0x01
+#define ZLG72128_REG_REPEATCNT				0x02
+#define ZLG72128_REG_FUNCTIONKEY			0x03
+#define ZLG72128_REG_CMDBUF0				0x07
+#define ZLG72128_REG_CMDBUF1				0x08
+#define ZLG72128_REG_FLAGONOFF				0x0b
+#define ZLG72128_REG_DISPCTRL0				0x0c
+#define ZLG72128_REG_DISPCTRL1				0x0d
+#define ZLG72128_REG_FLASH0					0x0e
+#define ZLG72128_REG_FLASH1					0x0f
+#define ZLG72128_REG_DISPBUF0				0x10
+#define ZLG72128_REG_DISPBUF(n)				(0x10|(n))
+/*---------------------------------------------------------------------------------*/
+#define ZLG72128_LED_DISCOUNT				12
+
+/*---------------------------------控制命令定义------------------------------------*/
+#define ZLG72128_CMD_SEGONOFF				(0x01<<4) 
+#define ZLG72128_CMD_DOWNLOAD				(0x02<<4)
+#define ZLG72128_CMD_RESET					(0x03<<4)
+#define ZLG72128_CMD_TEST					(0x04<<4)
+#define ZLG72128_CMD_SHIFTLEFT				(0x05<<4)
+#define ZLG72128_CMD_CYCLICSHIFTLEFT		(0x06<<4)
+#define ZLG72128_CMD_SHIFTRIGHT				(0x07<<4)
+#define ZLG72128_CMD_CYCLICSHIFTRIGHT		(0x08<<4)
+#define ZLG72128_CMD_SCANNING				(0x09<<4)
+/*---------------------------------------------------------------------------------*/
+
+#define container_of(ptr, type, member) ({						\
+		const typeof( ((type *)0)->member ) *__mptr = (ptr);    \
+		(type *)( (char *)__mptr - offsetof(type,member) );})
+
+#define ZLG72128_DRIVER_NAME				"zlg72128"
+/**
+ * \brief ZLG72128从机地址（用户可检测A4的电平来确定当前ZLG72128模块的从机地址）
+ *        若引脚A4为浮空或者高电平，则从机地址为0x30
+ *        若引脚A4为低电平，则从机地址为0x20
+ */
+#define  ZLG72128_PIN_HIGH_SLV_ADDR  0x30
+#define  ZLG72128_PIN_LOW_SLV_ADDR   0x20
+/*zlg72128设备名*/
+#define ZLG72128_LEDDEV_NAME				"i2cLED"
+#define ZLG72128_KEYDEV_NAME				"i2cKEY"
+/*普通按键延时释放*/
+#define ZLG72128_KEY_RELEASE				100
+#define ZLG72128_KEY_READ_RELEASE_COUNT		3
+/*最大支持按键数*/
+#define ZLG72128_MAX_KEY_COUNT				32
+#define ZLG72128_MAX_COMMON_KEY_COUNT		24
+
+#define ZLG72128_MAX_DEV_COUNT				8
+
+
+
+
+
+
+
+
+
 /*-------------------------------------------------------------------*/
 /*----------------------------ioctl 控制命令-------------------------*/
 /*-------------------------------------------------------------------*/
