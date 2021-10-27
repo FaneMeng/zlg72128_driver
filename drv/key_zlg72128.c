@@ -7,10 +7,13 @@
 #include <linux/platform_device.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
+#include <linux/uaccess.h>
+#include <linux/io.h>
 #include <asm/uaccess.h>  
 #include <asm/irq.h>  
 #include <asm/io.h>  
 #include <linux/gpio.h>
+#include <linux/of_gpio.h>
 #include <linux/cdev.h>  
 #include <linux/device.h>  
 #include <linux/miscdevice.h>
@@ -84,7 +87,7 @@ static char *zlg72128_dev_name[ZLG72128_MAX_DEV_COUNT] = {
 
 /*--------------------------------i2c 数据传输----------------------------------*/
 /*双字节写入*/
-static int zlg72128_write(struct zlg72128_dev_t *zdev, int offset, char value0, char value1, int count)
+/* static int zlg72128_write(struct zlg72128_dev_t *zdev, int offset, char value0, char value1, int count)
 {
 	unsigned char data[3];
 	struct i2c_msg msg;
@@ -102,7 +105,7 @@ static int zlg72128_write(struct zlg72128_dev_t *zdev, int offset, char value0, 
 		return ZLG72128_RETURN_ERROR;
 
 	return ZLG72128_RETURN_OK;
-}
+} */
 
 /*读多字节数据*/
 static int zlg72128_read(struct zlg72128_dev_t *zdev,int offset,char *data,int count)
@@ -128,14 +131,23 @@ static int zlg72128_read(struct zlg72128_dev_t *zdev,int offset,char *data,int c
 }
 /*--------------------------------------------------------------------*/
 
-
-int zlg72128_probe(struct i2c_client *i2c_client,const struct i2c_devied_id *id)
+static const struct  i2c_device_id zlg72128_id_table[] = 
 {
-	unsigned char regkey = 0;
+	{ZLG72128_DRIVER_NAME,0},
+	{ }
+};
+
+static const struct of_device_id  zlg72128_dt_ids[] = {
+    { .compatible = "zlg72128"},
+    { }  
+};
+
+int zlg72128_probe(struct i2c_client *i2c_client,const struct i2c_device_id *id)
+{
 	int zlg72128_dev_count=0;
 	int ret=0,i=0;
 	struct zlg72128_dev_data dev_data;
-	int _i2cline,_sla,_rst,_irq;
+	int _i2cline,_sla;
 	int key_list[ZLG72128_MAX_KEY_COUNT] = {0};
 	printk("This is zlg72128 probe function!\n");
 	for(zlg72128_dev_count=0;zlg72128_dev_count<ZLG72128_MAX_DEV_COUNT;zlg72128_dev_count++){
@@ -159,12 +171,21 @@ int zlg72128_probe(struct i2c_client *i2c_client,const struct i2c_devied_id *id)
 	if(!of_property_read_u32(i2c_client->dev.of_node,"sla",&_sla)){
 		dev_data.sla = _sla;
 	}
-	if(!of_property_read_u32(i2c_client->dev.of_node,"irq",&_irq)){
-		dev_data.irq = _irq;
+
+	dev_data.irq = of_get_named_gpio(i2c_client->dev.of_node,"irq-gpios", 0);
+	if(dev_data.irq < 0)
+	{
+		printk("Get irq-gpios name error.\n");
+		return -EBUSY;
 	}
-	if(!of_property_read_u32(i2c_client->dev.of_node,"rst",&_rst)){
-		dev_data.rst = _rst;
+
+	dev_data.irq = of_get_named_gpio(i2c_client->dev.of_node,"rst-gpios", 0);
+	if(dev_data.irq < 0)
+	{
+		printk("Get rst-gpios name error.\n");
+		return -EBUSY;
 	}
+	
 	if(of_property_read_u32_array(i2c_client->dev.of_node,"keys_list",key_list,ZLG72128_MAX_KEY_COUNT) < 0){
 		dev_data.key_list = key_list_def;
 	}else{
@@ -176,6 +197,7 @@ int zlg72128_probe(struct i2c_client *i2c_client,const struct i2c_devied_id *id)
 	zlg72128_devs[zlg72128_dev_count].keyRelease = ZLG72128_KEY_RELEASE;
 	zlg72128_devs[zlg72128_dev_count].zlg72128_adapter = i2c_client->adapter;
 
+	/*打印设备信息*/
 	printk("zlg72128-%d i2cline : %d\n",zlg72128_dev_count,dev_data.i2cline);
 	printk("zlg72128-%d sla     : 0x%02x\n",zlg72128_dev_count,dev_data.sla);
 	printk("zlg72128-%d irq pin : %d\n",zlg72128_dev_count,dev_data.irq);
@@ -189,12 +211,54 @@ int zlg72128_probe(struct i2c_client *i2c_client,const struct i2c_devied_id *id)
 		printk("\n");
 	}
 	
-	while(!regkey)
+	/*复位*/
+	if(dev_data.rst)
 	{
-		ret = zlg72128_read(&zlg72128_devs[zlg72128_dev_count],ZLG72128_REG_KEY,(char *)(&regkey),1);
-	} 
-	printk("zlg72128-%d regkey : %d\n",zlg72128_dev_count,regkey);
+		zlg72128_devs[zlg72128_dev_count].rst = dev_data.rst;
+		ret = gpio_request_one(zlg72128_devs[zlg72128_dev_count].rst, GPIOF_OUT_INIT_LOW,"zlg72128_rst_gpio");
+		if(ret){
+			printk("zlg72128 reset gpio request error!!\n");
+			goto rst_err;
+		}
+		gpio_direction_output(zlg72128_devs[zlg72128_dev_count].rst,0);
+		msleep(50);
+		gpio_direction_output(zlg72128_devs[zlg72128_dev_count].rst,1);
+	}
+
+	/*中断设置*/
+	if(dev_data.irq)
+	{
+		zlg72128_devs[zlg72128_dev_count].irq = dev_data.irq;
+		ret = gpio_request_one(zlg72128_devs[zlg72128_dev_count].irq, GPIOF_IN, "zlg72128_irq_gpio");
+		if(ret)
+		{
+			printk("zlg72128 irq gpio request error!!\n");
+			goto irq_err;
+		}
+	}
+	else{
+		printk("zlg72128-%d irq is not initial!!\n",zlg72128_dev_count);
+		goto irq_err;
+	}
+
+	/*按键设备初始化*/
+	ret = zlg72128_btns_creat(&pdev->dev,&zlg72128_devs[zlg72128_dev_count],dev_data.key_list);
+	if(ret < 0){
+		printk("zlg72128-%d btn create error!!!\n",zlg72128_dev_count);
+		goto btns_creat_err;
+	}
+
+	/*初始化并注册杂项设备*/  
+	zlg72128_devs[zlg72128_dev_count].zlg72128_misc.minor	=	MISC_DYNAMIC_MINOR;		//自动分配次设备号
+	zlg72128_devs[zlg72128_dev_count].zlg72128_misc.name	=	zlg72128_dev_name[zlg72128_dev_count];	//
+
 	return 0;
+	irq_err:
+	if(zlg72128_devs[zlg72128_dev_count].rst){
+		gpio_free(zlg72128_devs[zlg72128_dev_count].rst);
+	}
+	rst_err:
+	return ret;
 }
 
 static int zlg72128_remove(struct i2c_client *i2c_client)
@@ -203,15 +267,6 @@ static int zlg72128_remove(struct i2c_client *i2c_client)
 	return 0;
 }
 
-const struct  i2c_device_id zlg72128_id_table = 
-{
-	.name = ZLG72128_DRIVER_NAME
-};
-
-const struct of_device_id  zlg72128_dt_ids[] = {
-    { .compatible = "zlg72128"},
-    { }  
-};
 
 static struct i2c_driver zlg72128_driver = {
 	.probe = zlg72128_probe,
@@ -221,7 +276,7 @@ static struct i2c_driver zlg72128_driver = {
 		.name = ZLG72128_DRIVER_NAME,
         .of_match_table = zlg72128_dt_ids
     },
-	.id_table = &zlg72128_id_table 
+	.id_table = zlg72128_id_table 
 };
 
 static int __init zlg72128_init(void)
