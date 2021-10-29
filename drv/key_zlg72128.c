@@ -57,7 +57,8 @@ struct zlg72128_dev_t {
 	int status;								/*用于表示当前设备状态 0:未被使用 1:已使用*/
 	struct miscdevice zlg72128_misc;		/*杂项设备*/
 	struct i2c_adapter *zlg72128_adapter;	/*i2c adapter*/
-	int irq;							/*中断所使用的gpio*/
+	int irq_gpio;							/*中断所使用的gpio*/
+	int irq;							/*中断号*/
 	int rst;							/*复位所用的gpio*/
 	struct work_struct keyboard_work;		/*用于键盘读取中断*/
 	struct input_dev *zlg72128_key;			/*键盘输入设备*/
@@ -129,7 +130,49 @@ static int zlg72128_read(struct zlg72128_dev_t *zdev,int offset,char *data,int c
 
 	return ZLG72128_RETURN_OK;
 }
-/*--------------------------------------------------------------------*/
+
+static irqreturn_t zlg72128_key_event(int irq,void *dev_id)
+{
+	struct zlg72128_dev_t *zdev = dev_id;
+	//schedule_work(&zdev->keyboard_work);
+	printk("This is irq function!");
+	return IRQ_HANDLED;
+}
+
+/*键盘初始化*/
+static int zlg72128_btns_creat(struct device *dev, struct zlg72128_dev_t *zdev, int *keys)
+{
+	int ret;
+	/*注册中断*/
+	zdev->irq = gpio_to_irq(zdev->irq_gpio);
+	ret = request_irq(zdev->irq,zlg72128_key_event,IRQF_TRIGGER_FALLING,"zlg72128-keys",(void *)zdev);
+	if(ret){
+		printk("request irq error!\n");
+		goto request_irq_err;
+	}
+
+	/*定时器初始化*/
+	/* init_timer(&zdev->common_key_timeout);
+	zdev->common_key_timeout.function = common_key_timeout_handle;
+	zdev->common_key_timeout.data = (unsigned long)zdev; */
+
+	/*注册输入设备*/
+/* 	ret = input_register_device(zdev->zlg72128_key);
+	if(ret){
+		input_free_device(zdev->zlg72128_key);
+		printk("input register error!\n");
+		goto input_register_err;
+	} */
+
+	return 0;
+
+input_register_err:
+	free_irq(zdev->irq,NULL);
+request_irq_err:
+	input_free_device(zdev->zlg72128_key);
+input_alloc_err:
+	return ret;
+}
 
 static const struct  i2c_device_id zlg72128_id_table[] = 
 {
@@ -146,6 +189,7 @@ int zlg72128_probe(struct i2c_client *i2c_client,const struct i2c_device_id *id)
 {
 	int zlg72128_dev_count=0;
 	int ret=0,i=0;
+	int regkey = 0;
 	struct zlg72128_dev_data dev_data;
 	int _i2cline,_sla;
 	int key_list[ZLG72128_MAX_KEY_COUNT] = {0};
@@ -179,8 +223,8 @@ int zlg72128_probe(struct i2c_client *i2c_client,const struct i2c_device_id *id)
 		return -EBUSY;
 	}
 
-	dev_data.irq = of_get_named_gpio(i2c_client->dev.of_node,"rst-gpios", 0);
-	if(dev_data.irq < 0)
+	dev_data.rst = of_get_named_gpio(i2c_client->dev.of_node,"rst-gpios", 0);
+	if(dev_data.rst < 0)
 	{
 		printk("Get rst-gpios name error.\n");
 		return -EBUSY;
@@ -210,26 +254,33 @@ int zlg72128_probe(struct i2c_client *i2c_client,const struct i2c_device_id *id)
 		}
 		printk("\n");
 	}
-	
+
+	/* while(!regkey)
+	{
+		ret = zlg72128_read(&zlg72128_devs[zlg72128_dev_count],ZLG72128_REG_KEY,(char *)(&regkey),1);
+	}
+	printk("regkey : %d\n",regkey); */
 	/*复位*/
 	if(dev_data.rst)
 	{
 		zlg72128_devs[zlg72128_dev_count].rst = dev_data.rst;
-		ret = gpio_request_one(zlg72128_devs[zlg72128_dev_count].rst, GPIOF_OUT_INIT_LOW,"zlg72128_rst_gpio");
+		ret = gpio_request(zlg72128_devs[zlg72128_dev_count].rst,"zlg72128_rst_gpio");
 		if(ret){
 			printk("zlg72128 reset gpio request error!!\n");
 			goto rst_err;
 		}
-		gpio_direction_output(zlg72128_devs[zlg72128_dev_count].rst,0);
-		msleep(50);
 		gpio_direction_output(zlg72128_devs[zlg72128_dev_count].rst,1);
+		gpio_set_value(zlg72128_devs[zlg72128_dev_count].rst,0);
+		msleep(50);
+		gpio_set_value(zlg72128_devs[zlg72128_dev_count].rst,1);
+		printk("set_value_ok\n");
 	}
 
 	/*中断设置*/
 	if(dev_data.irq)
 	{
-		zlg72128_devs[zlg72128_dev_count].irq = dev_data.irq;
-		ret = gpio_request_one(zlg72128_devs[zlg72128_dev_count].irq, GPIOF_IN, "zlg72128_irq_gpio");
+		zlg72128_devs[zlg72128_dev_count].irq_gpio = dev_data.irq;
+		ret = gpio_request_one(zlg72128_devs[zlg72128_dev_count].irq_gpio, GPIOF_IN, "zlg72128_irq_gpio");
 		if(ret)
 		{
 			printk("zlg72128 irq gpio request error!!\n");
@@ -242,7 +293,7 @@ int zlg72128_probe(struct i2c_client *i2c_client,const struct i2c_device_id *id)
 	}
 
 	/*按键设备初始化*/
-	ret = zlg72128_btns_creat(&pdev->dev,&zlg72128_devs[zlg72128_dev_count],dev_data.key_list);
+	ret = zlg72128_btns_creat(&i2c_client->dev,&zlg72128_devs[zlg72128_dev_count],dev_data.key_list);
 	if(ret < 0){
 		printk("zlg72128-%d btn create error!!!\n",zlg72128_dev_count);
 		goto btns_creat_err;
@@ -250,9 +301,12 @@ int zlg72128_probe(struct i2c_client *i2c_client,const struct i2c_device_id *id)
 
 	/*初始化并注册杂项设备*/  
 	zlg72128_devs[zlg72128_dev_count].zlg72128_misc.minor	=	MISC_DYNAMIC_MINOR;		//自动分配次设备号
-	zlg72128_devs[zlg72128_dev_count].zlg72128_misc.name	=	zlg72128_dev_name[zlg72128_dev_count];	//
+	zlg72128_devs[zlg72128_dev_count].zlg72128_misc.name	=	zlg72128_dev_name[zlg72128_dev_count];	
 
 	return 0;
+
+	btns_creat_err:
+	gpio_free(zlg72128_devs[zlg72128_dev_count].irq_gpio);
 	irq_err:
 	if(zlg72128_devs[zlg72128_dev_count].rst){
 		gpio_free(zlg72128_devs[zlg72128_dev_count].rst);
@@ -263,6 +317,9 @@ int zlg72128_probe(struct i2c_client *i2c_client,const struct i2c_device_id *id)
 
 static int zlg72128_remove(struct i2c_client *i2c_client)
 {
+	free_irq(zlg72128_devs[0].irq,(void *)&zlg72128_devs[0]);
+	gpio_free(zlg72128_devs[0].rst);
+	gpio_free(zlg72128_devs[0].irq_gpio);
 	printk("This is zlg72128 remove function!\n");
 	return 0;
 }
